@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}SET · Finance Manager Login{% endblock %}
+{% block body %}
+<div class="set-auth-wrapper">
+  <div class="set-login-glass-container">
+    
+    <!-- Left Column: Visual Card Composition with Gold Rupee Emblem -->
+    <div class="set-login-card-col">
+      <div class="set-card-stage">
+        <!-- Layered Background Cards for Dimensional Depth -->
+        <div class="set-card-layer set-card-layer-back"></div>
+        <div class="set-card-layer set-card-layer-mid"></div>
+        
+        <!-- Glowing Gold Rupee Sun / Disc in Background -->
+        <div class="set-gold-emblem">
+          <div class="set-rupee-bg-symbol">₹</div>
+        </div>
+
+        <!-- Front Translucent Interactive Login Card -->
+        <div class="set-front-card">
+          <!-- Big Transparent Rupee Watermark Overlay -->
+          <div class="set-watermark-rupee">₹</div>
+
+          <form method="post" action="{% url 'login' %}" class="set-login-form">
+            {% csrf_token %}
+            {% if form.errors %}
+              <div class="set-auth-error">
+                Invalid username or password.
+              </div>
+            {% endif %}
+
+            <!-- Username Pill Input with User Icon -->
+            <div class="set-input-group">
+              <span class="set-input-icon">👤</span>
+              <input type="text" name="username" id="id_username" placeholder="Username" required autofocus autocomplete="username" value="{{ form.username.value|default:'' }}">
+            </div>
+
+            <!-- Password Pill Input with Lock Icon -->
+            <div class="set-input-group">
+              <span class="set-input-icon">🔒</span>
+              <input type="password" name="password" id="id_password" placeholder="••••••••••" required autocomplete="current-password">
+            </div>
+
+            <!-- Vibrant Coral Pill Login Button -->
+            <button type="submit" class="set-btn-login">
+              LOGIN
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="set-auth-links">
+        <span>New here?</span> <a href="{% url 'signup' %}">Create an account</a>
+      </div>
+    </div>
+
+    <!-- Right Column: Big Crisp Typography -->
+    <div class="set-login-brand-col">
+      <h1 class="set-brand-title">Smart Expense Tracker</h1>
+      <h2 class="set-brand-subtitle">SET</h2>
+      <p class="set-brand-tagline">Finance Manager</p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

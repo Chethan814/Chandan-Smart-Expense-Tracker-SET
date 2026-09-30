@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}SET · Home & Statement Hub{% endblock %}
+{% block body %}
+<div class="set-home-wrapper">
+  <div class="set-home-glass-container">
+
+    <!-- Top Bar: Profile & Live Date/Time -->
+    <header class="set-home-topbar">
+      <!-- Left: User Avatar & Name Badge -->
+      <div class="set-user-badge-group" id="openSettingsBadge" title="Click to open Settings">
+        <div class="set-user-avatar">
+          {% if user.profile.avatar %}
+            <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}" class="set-avatar-img">
+          {% else %}
+            <span class="set-avatar-icon">👤</span>
+          {% endif %}
+        </div>
+        <div class="set-user-name-pill">
+          <span class="set-user-name-text">{{ user.first_name|default:user.username }}</span>
+        </div>
+      </div>
+
+      <!-- Right: Live Date and Time Gold Pill -->
+      <div class="set-datetime-pill">
+        <div class="set-cal-icon-wrap">
+          <span class="set-cal-icon">📅</span>
+        </div>
+        <span class="set-datetime-text" id="liveDateTime">Loading date...</span>
+      </div>
+    </header>
+
+    <!-- Main Grid: Left Sidebar & Right Workspace -->
+    <div class="set-home-layout">
+      
+      <!-- Left Sidebar: Dark Pill Nav Buttons & Settings Gear -->
+      <aside class="set-home-sidebar">
+        <div class="set-nav-pills-group">
+          <a href="{% url 'home' %}" class="set-pill-btn set-pill-btn-active">
+            Upload
+          </a>
+          <a href="{% url 'transactions' %}" class="set-pill-btn">
+            Transaction
+          </a>
+          <a href="{% url 'dashboard' %}" class="set-pill-btn">
+            Dashboard
+          </a>
+        </div>
+
+        <!-- Settings Gear at Bottom Left -->
+        <button type="button" class="set-gear-btn" id="openSettingsGear" title="Settings & Profile">
+          <span class="set-gear-icon">⚙</span>
+        </button>
+      </aside>
+
+      <!-- Right Main Workspace: The Blank White Space for Upload -->
+      <main class="set-workspace-white-card">
+        
+        <!-- Glowing Center Gold Emblem / Rupee Watermark -->
+        <div class="set-workspace-rupee-bg">
+          <div class="set-workspace-gold-disc">
+            <span class="set-workspace-rupee-symbol">₹</span>
+          </div>
+        </div>
+
+        <!-- Inner Content: Bank Statement Upload Dropzone -->
+        <div class="set-upload-content-layer">
+          
+          {% if pipeline_error %}
+            <div class="set-flash-alert set-flash-error">
+              <span>⚠️ {{ pipeline_error }}</span>
+            </div>
+          {% endif %}
+
+          {% if messages %}
+            {% for message in messages %}
+              <div class="set-flash-alert set-flash-success">
+                <span>✓ {{ message }}</span>
+              </div>
+            {% endfor %}
+          {% endif %}
+
+          <div class="set-upload-header">
+            <h2 class="set-upload-title">Bank Statement Extraction</h2>
+            <p class="set-upload-subtitle">Drop your financial statements or click to upload</p>
+          </div>
+
+          <form method="post" action="{% url 'upload' %}" enctype="multipart/form-data" id="statementUploadForm" class="set-upload-form">
+            {% csrf_token %}
+            
+            <div class="set-dropzone" id="statementDropzone">
+              <input type="file" name="statements" id="statementFileInput" multiple accept=".pdf,.csv,.xlsx,.xls,.tsv,.txt" class="set-file-hidden">
+              
+              <div class="set-dropzone-content">
+                <div class="set-upload-icon-circle">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                </div>
+                <div class="set-dropzone-text">
+                  <span class="set-dropzone-primary">Click to select or drag and drop</span>
+                  <span class="set-dropzone-secondary">PDF, CSV, Excel (XLSX, XLS), TSV, TXT (up to 20 files)</span>
+                </div>
+              </div>
+
+              <!-- Selected Files Feedback -->
+              <div id="fileSelectionPreview" class="set-file-preview-list" style="display: none;"></div>
+            </div>
+
+            <div class="set-upload-actions">
+              <button type="submit" id="submitUploadBtn" class="set-btn-extract" disabled>
+                <span class="set-btn-extract-icon">⚡</span> Extract Statement Data
+              </button>
+            </div>
+          </form>
+
+          {% if last_batch %}
+            <div class="set-last-batch-info">
+              <span class="set-batch-tag">Last Batch #{{ last_batch.id }}</span>
+              <span>{{ last_batch.get_status_display }} · {{ last_batch.transaction_count }} transaction(s) · {{ last_batch.file_count }} file(s)</span>
+            </div>
+          {% endif %}
+
+        </div>
+      </main>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     Settings Modal: Edit Profile (Name, Photo) & Delete Account
+     ========================================================================== -->
+<div id="settingsModal" class="set-modal-backdrop" style="display: none;">
+  <div class="set-modal-box">
+    
+    <div class="set-modal-header">
+      <div class="set-modal-title-group">
+        <span class="set-modal-title-icon">⚙</span>
+        <h3>Account Settings</h3>
+      </div>
+      <button type="button" class="set-modal-close" id="closeSettingsModal">&times;</button>
+    </div>
+
+    <div class="set-modal-body">
+      
+      <!-- Section 1: Edit Profile -->
+      <section class="set-settings-section">
+        <h4 class="set-section-heading">User Profile</h4>
+        
+        <form method="post" action="{% url 'update_profile' %}" enctype="multipart/form-data" class="set-profile-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'home' %}">
+
+          <!-- Avatar Preview and Upload -->
+          <div class="set-avatar-edit-row">
+            <div class="set-modal-avatar-preview">
+              {% if user.profile.avatar %}
+                <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}" id="avatarPreviewImg" class="set-modal-avatar-img">
+              {% else %}
+                <div class="set-modal-avatar-placeholder" id="avatarPreviewPlaceholder">👤</div>
+                <img src="" alt="" id="avatarPreviewImg" class="set-modal-avatar-img" style="display:none;">
+              {% endif %}
+            </div>
+            
+            <div class="set-avatar-edit-controls">
+              <label for="avatarFileInput" class="set-btn-upload-photo">
+                📷 Choose Photo
+              </label>
+              <input type="file" name="avatar" id="avatarFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;">
+              
+              {% if user.profile.avatar %}
+                <label class="set-remove-photo-label">
+                  <input type="checkbox" name="remove_avatar" value="1"> Remove current photo
+                </label>
+              {% endif %}
+              <span class="set-photo-help">PNG, JPG, WEBP recommended</span>
+            </div>
+          </div>
+
+          <!-- Name & Email Fields -->
+          <div class="set-form-grid">
+            <div class="set-form-field">
+              <label for="id_first_name">First Name</label>
+              <input type="text" name="first_name" id="id_first_name" value="{{ user.first_name }}" placeholder="e.g. Chandan">
+            </div>
+
+            <div class="set-form-field">
+              <label for="id_last_name">Last Name</label>
+              <input type="text" name="last_name" id="id_last_name" value="{{ user.last_name }}" placeholder="e.g. M">
+            </div>
+          </div>
+
+          <div class="set-form-field">
+            <label for="id_email">Email Address</label>
+            <input type="email" name="email" id="id_email" value="{{ user.email }}" placeholder="you@example.com">
+          </div>
+
+          <div class="set-form-field">
+            <label>Username</label>
+            <input type="text" value="{{ user.username }}" disabled class="set-input-disabled">
+          </div>
+
+          <div class="set-modal-actions">
+            <button type="submit" class="set-btn-save-profile">Save Profile Changes</button>
+          </div>
+        </form>
+      </section>
+
+      <hr class="set-settings-divider">
+
+      <!-- Section 2: Danger Zone (Delete Account) -->
+      <section class="set-settings-section set-danger-zone">
+        <h4 class="set-danger-heading">Danger Zone</h4>
+        <p class="set-danger-text">
+          Deleting your account will permanently wipe all uploaded statements, bank accounts, and transactions. This action cannot be undone.
+        </p>
+
+        <form method="post" action="{% url 'delete_account' %}" onsubmit="return confirmDeleteAccount(event)" class="set-delete-account-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'home' %}">
+
+          <div class="set-form-field">
+            <label for="confirmDeleteInput">Type <strong>DELETE</strong> to confirm:</label>
+            <input type="text" name="confirm_delete" id="confirmDeleteInput" placeholder="DELETE" required autocomplete="off">
+          </div>
+
+          <button type="submit" class="set-btn-delete-account" id="deleteAccountBtn">
+            🗑 Permanently Delete Account
+          </button>
+        </form>
+      </section>
+
+      <hr class="set-settings-divider">
+
+      <!-- Section 3: Sign Out -->
+      <div class="set-logout-row">
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="set-btn-signout">
+            🚪 Sign Out of SET
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- JavaScript for Live Date/Time, Dropzone, and Settings Modal -->
+<script>
+(function() {
+  // 1. Live Date & Time Updater
+  function updateClock() {
+    const el = document.getElementById('liveDateTime');
+    if (!el) return;
+    const now = new Date();
+    const options = {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    };
+    el.textContent = now.toLocaleString('en-US', options);
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // 2. Dropzone & File Selection Feedback
+  const dropzone = document.getElementById('statementDropzone');
+  const fileInput = document.getElementById('statementFileInput');
+  const preview = document.getElementById('fileSelectionPreview');
+  const submitBtn = document.getElementById('submitUploadBtn');
+
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'INPUT') {
+        fileInput.click();
+      }
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('set-dropzone-hover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('set-dropzone-hover');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        handleFilesSelected();
+      }
+    });
+
+    fileInput.addEventListener('change', handleFilesSelected);
+  }
+
+  function handleFilesSelected() {
+    const files = fileInput.files;
+    if (!files || files.length === 0) {
+      preview.style.display = 'none';
+      submitBtn.disabled = true;
+      return;
+    }
+
+    submitBtn.disabled = false;
+    preview.style.display = 'flex';
+    preview.innerHTML = '';
+
+    const badge = document.createElement('div');
+    badge.className = 'set-file-count-badge';
+    badge.textContent = `${files.length} file(s) selected:`;
+    preview.appendChild(badge);
+
+    const list = document.createElement('div');
+    list.className = 'set-file-names-list';
+    Array.from(files).slice(0, 5).forEach(f => {
+      const item = document.createElement('span');
+      item.className = 'set-file-pill';
+      item.textContent = f.name;
+      list.appendChild(item);
+    });
+
+    if (files.length > 5) {
+      const more = document.createElement('span');
+      more.className = 'set-file-pill-more';
+      more.textContent = `+${files.length - 5} more`;
+      list.appendChild(more);
+    }
+    preview.appendChild(list);
+  }
+
+  // 3. Settings Modal Management
+  const modal = document.getElementById('settingsModal');
+  const openGear = document.getElementById('openSettingsGear');
+  const openBadge = document.getElementById('openSettingsBadge');
+  const closeBtn = document.getElementById('closeSettingsModal');
+
+  function openModal() {
+    if (modal) modal.style.display = 'flex';
+  }
+  function closeModal() {
+    if (modal) modal.style.display = 'none';
+  }
+
+  if (openGear) openGear.addEventListener('click', openModal);
+  if (openBadge) openBadge.addEventListener('click', openModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && modal.style.display === 'flex') {
+      closeModal();
+    }
+  });
+
+  // 4. Avatar Instant Preview on File Change
+  const avatarInput = document.getElementById('avatarFileInput');
+  const avatarImg = document.getElementById('avatarPreviewImg');
+  const avatarPlaceholder = document.getElementById('avatarPreviewPlaceholder');
+
+  if (avatarInput && avatarImg) {
+    avatarInput.addEventListener('change', () => {
+      const file = avatarInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          avatarImg.src = e.target.result;
+          avatarImg.style.display = 'block';
+          if (avatarPlaceholder) avatarPlaceholder.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  // 5. Delete Account Confirmation
+  window.confirmDeleteAccount = function(e) {
+    const input = document.getElementById('confirmDeleteInput');
+    if (!input || input.value.trim() !== 'DELETE') {
+      alert('Please type DELETE in exact capital letters to confirm account deletion.');
+      if (input) input.focus();
+      return false;
+    }
+    return confirm('Are you absolutely sure? All your financial statements, bank accounts, and transactions will be permanently erased.');
+  };
+})();
+</script>
+{% endblock %}

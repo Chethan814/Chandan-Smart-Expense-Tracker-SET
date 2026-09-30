@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}SET · Finance Manager Sign Up{% endblock %}
+{% block body %}
+<div class="set-auth-wrapper">
+  <div class="set-login-glass-container">
+    
+    <!-- Left Column: Visual Card Composition with Gold Rupee Emblem -->
+    <div class="set-login-card-col">
+      <div class="set-card-stage set-card-stage-signup">
+        <div class="set-card-layer set-card-layer-back"></div>
+        <div class="set-card-layer set-card-layer-mid"></div>
+        
+        <div class="set-gold-emblem">
+          <div class="set-rupee-bg-symbol">₹</div>
+        </div>
+
+        <div class="set-front-card set-front-card-signup">
+          <div class="set-watermark-rupee">₹</div>
+
+          <form method="post" action="{% url 'signup' %}" class="set-login-form">
+            {% csrf_token %}
+            {% if form.errors %}
+              <div class="set-auth-error">
+                Please check the form errors below.
+              </div>
+            {% endif %}
+
+            <div class="set-input-group">
+              <span class="set-input-icon">👤</span>
+              <input type="text" name="username" id="id_username" placeholder="Choose Username" required autocomplete="username" value="{{ form.username.value|default:'' }}">
+            </div>
+            {% if form.username.errors %}
+              <div class="set-field-error">{{ form.username.errors.0 }}</div>
+            {% endif %}
+
+            <div class="set-input-group">
+              <span class="set-input-icon">🔒</span>
+              <input type="password" name="password1" id="id_password1" placeholder="Password (min 8 chars)" required autocomplete="new-password">
+            </div>
+            {% if form.password1.errors %}
+              <div class="set-field-error">{{ form.password1.errors.0 }}</div>
+            {% endif %}
+
+            <div class="set-input-group">
+              <span class="set-input-icon">🔒</span>
+              <input type="password" name="password2" id="id_password2" placeholder="Confirm Password" required autocomplete="new-password">
+            </div>
+            {% if form.password2.errors %}
+              <div class="set-field-error">{{ form.password2.errors.0 }}</div>
+            {% endif %}
+
+            <button type="submit" class="set-btn-login">
+              REGISTER
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="set-auth-links">
+        <span>Already registered?</span> <a href="{% url 'login' %}">Sign in</a>
+      </div>
+    </div>
+
+    <!-- Right Column: Big Crisp Typography -->
+    <div class="set-login-brand-col">
+      <h1 class="set-brand-title">SET</h1>
+      <h2 class="set-brand-subtitle">Finance Manager</h2>
+      <p class="set-brand-tagline">Create your private financial intelligence workspace</p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

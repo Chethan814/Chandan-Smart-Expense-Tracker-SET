@@ -1,0 +1,753 @@
+{% extends "base.html" %}
+{% load static humanize %}
+{% block title %}Smart Expense Tracker · Dashboard{% endblock %}
+{% block extra_head %}
+  <script src="{% static 'js/chart.umd.min.js' %}"></script>
+{% endblock %}
+{% block body %}
+<header class="site-nav">
+  <div class="site-nav-brand">
+    <a href="{% url 'home' %}" class="site-brand-link">
+      <span class="site-brand-logo">₹</span>
+      <strong>SET</strong> <span class="site-brand-sub">Analytics</span>
+    </a>
+  </div>
+  <nav>
+    <a href="{% url 'home' %}">Home</a>
+    <a href="{% url 'home' %}">Upload</a>
+    <a href="{% url 'transactions' %}{% if filter_query %}?{{ filter_query }}{% endif %}">Transactions</a>
+    <a href="{% url 'dashboard' %}" class="btn-primary nav-active">Dashboard</a>
+    <form method="post" action="{% url 'logout' %}" style="margin:0;">
+      {% csrf_token %}
+      <button type="submit" class="btn-nav-signout">Sign out</button>
+    </form>
+  </nav>
+</header>
+<main class="page">
+  {% if mode == "overall" %}
+    <h1>Overall analysis</h1>
+    <p class="muted">Combined view across every bank, holder and account you uploaded.</p>
+  {% else %}
+    <h1>{{ active_account.bank_name }}</h1>
+    <p class="muted">{{ active_account.account_holder }} · {{ active_account.display_account }}</p>
+  {% endif %}
+
+  {% include "tracker/_filters.html" with show_account_filter=False mode=mode reset_url="/dashboard/" %}
+
+  <div class="account-switch">
+    <a class="chip {% if mode == 'overall' %}active{% endif %}" href="{% url 'dashboard' %}{% if qs_no_account %}?{{ qs_no_account }}{% endif %}">All banks combined</a>
+    {% for acc in accounts %}
+      <a class="chip {% if active_account and active_account.id == acc.id %}active{% endif %}" href="{% url 'dashboard_account' acc.id %}{% if qs_no_account %}?{{ qs_no_account }}{% endif %}">
+        {{ acc.bank_name }} · {{ acc.account_holder }} · {{ acc.display_account }}
+      </a>
+    {% endfor %}
+  </div>
+
+  <!-- The Glance Hierarchy: 3 Quick-Summary Primary Cards -->
+  <section class="glance-kpis">
+    <div class="card glance-card glance-balance">
+      <div class="glance-label">Total Balance (Net Position)</div>
+      <b class="glance-value">₹ {{ metrics.net|floatformat:2|intcomma }}</b>
+      <span class="glance-subtext {% if metrics.net >= 0 %}text-emerald{% else %}text-rose{% endif %}">
+        {% if metrics.net >= 0 %}● Positive Cash Surplus{% else %}● Operating Deficit{% endif %}
+      </span>
+    </div>
+    <div class="card glance-card glance-income">
+      <div class="glance-label">Total / Monthly Income</div>
+      <b class="glance-value text-emerald">₹ {{ metrics.credit|floatformat:2|intcomma }}</b>
+      <span class="glance-subtext">All credits, client receipts & deposits</span>
+    </div>
+    <div class="card glance-card glance-spend">
+      <div class="glance-label">Total / Monthly Spend</div>
+      <b class="glance-value text-rose">₹ {{ metrics.debit|floatformat:2|intcomma }}</b>
+      <span class="glance-subtext">All operational debits & payouts</span>
+    </div>
+  </section>
+
+  <!-- Secondary Financial Telemetry Row -->
+  <section class="secondary-kpis">
+    <div class="card sub-kpi">
+      <span>Transactions</span>
+      <b>{{ metrics.count }}</b>
+    </div>
+    <div class="card sub-kpi">
+      <span>Average Debit</span>
+      <b>₹ {{ metrics.avg_debit|floatformat:2|intcomma }}</b>
+    </div>
+    <div class="card sub-kpi">
+      <span>Accounts in Scope</span>
+      <b>{{ metrics.num_accounts }}</b>
+    </div>
+    <div class="card sub-kpi">
+      <span>Categories Used</span>
+      <b>{{ metrics.num_categories_used }}</b>
+    </div>
+  </section>
+
+  <!-- The Deep Dive Highlights -->
+  <section class="highlights">
+    {% if metrics.top_category %}
+    <div class="card highlight">
+      <span class="muted">Top Spending Category</span>
+      <h3>{{ metrics.top_category.category }}</h3>
+      <p>₹{{ metrics.top_category.spent|floatformat:2|intcomma }} · {{ metrics.top_category.pct|floatformat:1 }}% of total spend</p>
+    </div>
+    {% endif %}
+    {% if metrics.max_txn %}
+    <div class="card highlight">
+      <span class="muted">Largest Single Expense</span>
+      <h3 class="text-rose">₹{{ metrics.max_txn.debit|floatformat:2|intcomma }}</h3>
+      <p>{{ metrics.max_txn.description|truncatechars:45 }} · {{ metrics.max_txn.txn_date|default:"—" }}</p>
+    </div>
+    {% endif %}
+    {% if metrics.top_credit %}
+    <div class="card highlight">
+      <span class="muted">Largest Credit Received</span>
+      <h3 class="text-emerald">₹{{ metrics.top_credit.credit|floatformat:2|intcomma }}</h3>
+      <p>{{ metrics.top_credit.description|truncatechars:45 }} · {{ metrics.top_credit.txn_date|default:"—" }}</p>
+    </div>
+    {% endif %}
+  </section>
+
+
+  <!-- ATM / Cash Withdrawal Spending Tracking Alert -->
+  {% if metrics.atm_cash_count and metrics.atm_cash_count > 0 %}
+  <section class="atm-alert-banner">
+    <div class="atm-alert-text">
+      <strong>🏧 Unallocated Cash Withdrawals Detected ({{ metrics.atm_cash_count }} withdrawal(s) · ₹{{ metrics.atm_cash_spent|floatformat:2|intcomma }})</strong>
+      <p>Bank statements record ATM/Cash debits, but not what the cash was spent on. Log your petty cash expenses, vendor advances, or staff disbursements to keep your accounts 100% auditable.</p>
+    </div>
+    <button type="button" class="btn btn-primary" onclick="openManualModal('', 'Petty Cash Spend from ATM', '', '')" style="background:#D97706; border-color:#B45309; white-space:nowrap;">
+      ✍️ Record Cash Spend
+    </button>
+  </section>
+  {% endif %}
+
+  <!-- SET conversational assistant (typed chat + spoken dialogue) -->
+  <section class="ai-chat-card" id="finbot-section">
+    {% csrf_token %}
+    <div class="chat-header">
+      <div class="chat-header-copy">
+        <strong>Talk with SET</strong>
+        <span class="chat-header-sub" id="chat-status-line">Conversation over this project's statements, accounts, and cashflow.</span>
+      </div>
+      <div class="chat-header-actions">
+        <button type="button" class="voice-toggle-btn" id="voice-toggle-btn" onclick="toggleVoiceOutput()" title="Hear SET speak replies">
+          <span id="voice-icon">🔇</span>
+          <span id="voice-label">SET Voice: OFF</span>
+        </button>
+        <span class="chat-model-badge" id="badge-text">SET Active</span>
+      </div>
+    </div>
+
+    <div class="chat-stream" id="chat-stream"></div>
+
+    <div class="chat-pills" id="chat-pills">
+      <button type="button" class="chat-pill" data-q="Hi SET, what is in my ledger?">Hello SET</button>
+      <button type="button" class="chat-pill" data-q="Give me a cashflow summary">Cashflow</button>
+      <button type="button" class="chat-pill" data-q="What is my closing balance?">Balance</button>
+      <button type="button" class="chat-pill" data-q="Which bank accounts are in this project?">Accounts</button>
+      <button type="button" class="chat-pill" data-q="Show vendor payments">Vendors</button>
+    </div>
+
+    <div class="voice-player-bar" id="voice-player-bar" style="display:none;">
+      <div class="voice-player-info">
+        <span class="voice-wave-anim" id="voice-wave"><span></span><span></span><span></span><span></span></span>
+        <span class="voice-player-status" id="voice-player-status">SET is speaking…</span>
+      </div>
+      <div class="voice-player-controls">
+        <button type="button" class="voice-ctrl-btn" id="voice-pause-btn" onclick="togglePauseVoice()" title="Pause or continue SET">⏸️ Pause</button>
+        <button type="button" class="voice-ctrl-btn voice-ctrl-stop" onclick="endVoiceConversation()" title="Stop voice conversation">⏹️ Stop talk</button>
+      </div>
+    </div>
+
+    <div class="chat-input-bar" id="chat-form">
+      <input type="text" id="chat-input"
+             placeholder="Talk to SET — type or use the mic. Follow-ups like “same for HDFC” work."
+             autocomplete="off"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();var v=this.value.trim();if(v)sendQuery(v,false);}">
+      <button type="button" class="mic-btn" id="mic-btn" title="Start a spoken conversation with SET" onclick="toggleVoiceInput()">🎙️</button>
+      <button type="button" class="btn btn-primary" id="chat-send-btn"
+              onclick="var v=document.getElementById('chat-input').value.trim();if(v)sendQuery(v,false);">Send</button>
+    </div>
+  </section>
+
+  <section class="charts">
+    <div class="card chart-card">
+      <h3>Category spends (all)</h3>
+      <canvas id="catChart"></canvas>
+    </div>
+    <div class="card chart-card">
+      <h3>Top 5 categories</h3>
+      <canvas id="top5Chart"></canvas>
+    </div>
+    <div class="card chart-card">
+      <h3>Monthly credit vs debit</h3>
+      <canvas id="monthChart"></canvas>
+    </div>
+    <div class="card chart-card">
+      <h3>Cumulative net over time</h3>
+      <canvas id="netChart"></canvas>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin-top:0; margin-bottom:0.9rem;">Category breakdown</h3>
+    <div class="table-glass-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Category</th><th>Spent</th><th>% of spend</th><th>Transactions</th></tr>
+        </thead>
+        <tbody>
+          {% for row in metrics.by_category %}
+          <tr>
+            <td>{{ row.category }}</td>
+            <td>₹{{ row.spent|floatformat:2|intcomma }}</td>
+            <td>{{ row.pct|floatformat:1 }}%</td>
+            <td>{{ row.n }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- Glassmorphic Modal for Adding Cash / Manual Spend -->
+<div class="modal-backdrop" id="manual-modal" style="display:none;">
+  <div class="modal-glass">
+    <div class="modal-header">
+      <h3 id="modal-title">✍️ Record Cash / Manual Spend</h3>
+      <button type="button" class="btn" onclick="closeManualModal()" style="padding:0.2rem 0.5rem; font-size:1.1rem; border:none; background:transparent;">✕</button>
+    </div>
+    <form method="post" action="{% url 'add_manual_transaction' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <input type="hidden" name="parent_id" id="modal-parent-id" value="">
+      <input type="hidden" name="account_id" id="modal-account-id" value="">
+
+      <div class="modal-body">
+        <div style="margin-bottom:1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:0.35rem;">Transaction Description / Payee *</label>
+          <input type="text" name="description" id="modal-description" required placeholder="e.g. Office Stationery Cash, Tea/Pantry, Local Porter" style="width:100%; padding:0.6rem; border-radius:10px; border:1px solid rgba(15,23,42,0.15); background:rgba(255,255,255,0.9);">
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:0.35rem;">Amount (₹) *</label>
+            <input type="number" step="0.01" name="amount" id="modal-amount" required placeholder="0.00" style="width:100%; padding:0.6rem; border-radius:10px; border:1px solid rgba(15,23,42,0.15); background:rgba(255,255,255,0.9);">
+          </div>
+          <div>
+            <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:0.35rem;">Type</label>
+            <select name="txn_type" style="width:100%; padding:0.6rem; border-radius:10px; border:1px solid rgba(15,23,42,0.15); background:rgba(255,255,255,0.9);">
+              <option value="debit">Debit / Expense Outflow</option>
+              <option value="credit">Credit / Cash Deposit</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:0.35rem;">Category</label>
+            <select name="category" style="width:100%; padding:0.6rem; border-radius:10px; border:1px solid rgba(15,23,42,0.15); background:rgba(255,255,255,0.9);">
+              {% for cat in categories %}
+                <option value="{{ cat }}" {% if cat == "Vendor Payment" %}selected{% endif %}>{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:0.35rem;">Date</label>
+            <input type="date" name="txn_date" id="modal-date" style="width:100%; padding:0.6rem; border-radius:10px; border:1px solid rgba(15,23,42,0.15); background:rgba(255,255,255,0.9);">
+          </div>
+        </div>
+
+        <div style="margin-bottom:0.5rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:0.35rem;">Notes / Reference (Optional)</label>
+          <input type="text" name="notes" placeholder="e.g. Voucher #482, Paid in cash" style="width:100%; padding:0.6rem; border-radius:10px; border:1px solid rgba(15,23,42,0.15); background:rgba(255,255,255,0.9);">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn" onclick="closeManualModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Transaction</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ chart_data|json_script:"chart-json" }}
+<script>
+  const data = JSON.parse(document.getElementById("chart-json").textContent);
+  Chart.defaults.color = "#64748B";
+  Chart.defaults.borderColor = "#E2E8F0";
+  Chart.defaults.font.family = '"Google Sans", "Segoe UI", sans-serif';
+  const palette = ["#4F46E5","#10B981","#F43F5E","#0EA5E9","#F59E0B","#8B5CF6","#06B6D4","#EC4899","#84CC16","#64748B","#0F172A","#14B8A6","#F97316","#3B82F6"];
+
+  new Chart(document.getElementById("catChart"), {
+    type: "doughnut",
+    data: {
+      labels: data.categories,
+      datasets: [{ data: data.category_spent, backgroundColor: palette, borderWidth: 2, borderColor: "#FFFFFF" }]
+    },
+    options: { plugins: { legend: { position: "bottom" } } }
+  });
+
+  new Chart(document.getElementById("top5Chart"), {
+    type: "bar",
+    data: {
+      labels: data.top5_categories,
+      datasets: [{ label: "Spent", data: data.top5_spent, backgroundColor: "#4F46E5", borderRadius: 6 }]
+    },
+    options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+  });
+
+  new Chart(document.getElementById("monthChart"), {
+    type: "bar",
+    data: {
+      labels: data.months,
+      datasets: [
+        { label: "Debit (Spend)", data: data.month_spent, backgroundColor: "#F43F5E", borderRadius: 6 },
+        { label: "Credit (Income)", data: data.month_credit, backgroundColor: "#10B981", borderRadius: 6 }
+      ]
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+  });
+
+  new Chart(document.getElementById("netChart"), {
+    type: "line",
+    data: {
+      labels: data.months,
+      datasets: [{ label: "Cumulative net", data: data.cumulative_net, borderColor: "#4F46E5", backgroundColor: "rgba(79, 70, 229, 0.12)", fill: true, tension: 0.35, pointRadius: 3 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  // ---------- SET voice + multi-turn conversation ----------
+  let voiceOutputEnabled = false;
+  let conversationMode = false;
+  let awaitingReply = false;
+  let recognition = null;
+  let isListening = false;
+  let activeAudio = null;
+  let voiceState = "idle";
+  let currentUtterance = null;
+  let dialogueState = null;
+  const conversationHistory = [];
+  const SET_USER_NAME = "{{ request.user.first_name|default:request.user.username|escapejs }}";
+  const PLACEHOLDER_IDLE = "Talk to SET — type or use the mic. Follow-ups like “same for HDFC” work.";
+
+  function setChatStatus(text) {
+    const line = document.getElementById("chat-status-line");
+    if (line) line.textContent = text;
+  }
+
+  function pickSpeechVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const prefer = voices.find(v => /en-IN/i.test(v.lang) && /female|heera|priya/i.test(v.name))
+      || voices.find(v => /en-IN/i.test(v.lang))
+      || voices.find(v => /en-GB/i.test(v.lang) && /female|female/i.test(v.name))
+      || voices.find(v => /en-/i.test(v.lang));
+    return prefer || null;
+  }
+
+  function stopRecognition() {
+    if (recognition) {
+      try { recognition.onend = null; recognition.stop(); } catch (e) {}
+      recognition = null;
+    }
+    isListening = false;
+    const micBtn = document.getElementById("mic-btn");
+    if (micBtn) micBtn.classList.remove("mic-listening");
+    const input = document.getElementById("chat-input");
+    if (input && !conversationMode) input.placeholder = PLACEHOLDER_IDLE;
+  }
+
+  function stopAllAudio() {
+    if (activeAudio) {
+      activeAudio.onended = null;
+      activeAudio.pause();
+      activeAudio.currentTime = 0;
+      activeAudio = null;
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      currentUtterance = null;
+    }
+    voiceState = "idle";
+    const playerBar = document.getElementById("voice-player-bar");
+    if (playerBar) playerBar.style.display = "none";
+    const pauseBtn = document.getElementById("voice-pause-btn");
+    if (pauseBtn) pauseBtn.innerHTML = "⏸️ Pause";
+  }
+
+  function onSetFinishedSpeaking() {
+    stopAllAudio();
+    if (conversationMode && !awaitingReply) {
+      setChatStatus("Your turn — SET is listening.");
+      startListening(true);
+    } else {
+      setChatStatus("Conversation over this project's statements, accounts, and cashflow.");
+    }
+  }
+
+  function endVoiceConversation() {
+    conversationMode = false;
+    stopRecognition();
+    stopAllAudio();
+    setChatStatus("Voice talk stopped. Type or tap the mic to continue with SET.");
+    const input = document.getElementById("chat-input");
+    if (input) input.placeholder = PLACEHOLDER_IDLE;
+  }
+
+  function togglePauseVoice() {
+    const pauseBtn = document.getElementById("voice-pause-btn");
+    const statusText = document.getElementById("voice-player-status");
+    const wave = document.getElementById("voice-wave");
+
+    if (voiceState === "playing") {
+      if (activeAudio) activeAudio.pause();
+      else if (window.speechSynthesis) window.speechSynthesis.pause();
+      voiceState = "paused";
+      if (pauseBtn) pauseBtn.innerHTML = "▶️ Continue";
+      if (statusText) statusText.textContent = "Paused — continue when you are ready";
+      if (wave) wave.classList.add("voice-wave-paused");
+    } else if (voiceState === "paused") {
+      if (activeAudio) activeAudio.play();
+      else if (window.speechSynthesis) window.speechSynthesis.resume();
+      voiceState = "playing";
+      if (pauseBtn) pauseBtn.innerHTML = "⏸️ Pause";
+      if (statusText) statusText.textContent = "SET is speaking…";
+      if (wave) wave.classList.remove("voice-wave-paused");
+    }
+  }
+
+  function syncVoiceToggleUi() {
+    const btn = document.getElementById("voice-toggle-btn");
+    const label = document.getElementById("voice-label");
+    const icon = document.getElementById("voice-icon");
+    if (voiceOutputEnabled) {
+      if (btn) btn.classList.add("voice-on");
+      if (label) label.textContent = "SET Voice: ON";
+      if (icon) icon.textContent = "🔊";
+    } else {
+      if (btn) btn.classList.remove("voice-on");
+      if (label) label.textContent = "SET Voice: OFF";
+      if (icon) icon.textContent = "🔇";
+    }
+  }
+
+  function toggleVoiceOutput() {
+    voiceOutputEnabled = !voiceOutputEnabled;
+    syncVoiceToggleUi();
+    if (voiceOutputEnabled) {
+      speakText("SET voice is on, " + SET_USER_NAME + ". Ask me about this ledger.", true);
+    } else {
+      conversationMode = false;
+      stopAllAudio();
+    }
+  }
+
+  function fallbackSpeak(clean) {
+    if (!window.speechSynthesis) {
+      onSetFinishedSpeaking();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    currentUtterance = new SpeechSynthesisUtterance(clean);
+    currentUtterance.lang = "en-IN";
+    currentUtterance.rate = 1.0;
+    currentUtterance.pitch = 1.02;
+    const voice = pickSpeechVoice();
+    if (voice) currentUtterance.voice = voice;
+    currentUtterance.onend = onSetFinishedSpeaking;
+    currentUtterance.onerror = onSetFinishedSpeaking;
+    window.speechSynthesis.speak(currentUtterance);
+  }
+
+  async function speakText(text, force = false) {
+    if (!voiceOutputEnabled && !force) return;
+    const clean = (text || "").replace(/<[^>]*>/g, " ").replace(/[*_#`]/g, "").replace(/₹/g, "rupees ").replace(/\s+/g, " ").trim();
+    if (!clean) return;
+
+    stopAllAudio();
+    const playerBar = document.getElementById("voice-player-bar");
+    const statusText = document.getElementById("voice-player-status");
+    const wave = document.getElementById("voice-wave");
+    const pauseBtn = document.getElementById("voice-pause-btn");
+    if (playerBar) playerBar.style.display = "flex";
+    if (statusText) statusText.textContent = "SET is speaking…";
+    if (wave) wave.classList.remove("voice-wave-paused");
+    if (pauseBtn) pauseBtn.innerHTML = "⏸️ Pause";
+    voiceState = "playing";
+    setChatStatus("SET is speaking. Pause or stop anytime.");
+
+    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")
+      ? document.querySelector("[name=csrfmiddlewaretoken]").value
+      : getCookie("csrftoken");
+
+    try {
+      const res = await fetch("{% url 'tts_api' %}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({ text: clean }),
+      });
+      if (res.ok) {
+        const audioBlob = await res.blob();
+        if (audioBlob && audioBlob.size > 40 && (audioBlob.type || "").indexOf("json") === -1) {
+          const audioUrl = URL.createObjectURL(audioBlob);
+          activeAudio = new Audio(audioUrl);
+          activeAudio.onended = onSetFinishedSpeaking;
+          activeAudio.onerror = () => fallbackSpeak(clean);
+          await activeAudio.play();
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("SET neural voice unavailable, using browser speech:", err);
+    }
+    fallbackSpeak(clean);
+  }
+
+  function startListening(fromConversation) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      if (!fromConversation) {
+        alert("Voice recognition needs Chrome, Edge, or Safari.");
+      }
+      return;
+    }
+    if (isListening) return;
+
+    const micBtn = document.getElementById("mic-btn");
+    const input = document.getElementById("chat-input");
+
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      isListening = true;
+      if (micBtn) micBtn.classList.add("mic-listening");
+      if (input) input.placeholder = "SET is listening, " + SET_USER_NAME + "…";
+      setChatStatus("Listening — speak naturally, then pause.");
+    };
+
+    recognition.onresult = (e) => {
+      let interim = "";
+      let finalText = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const piece = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += piece;
+        else interim += piece;
+      }
+      if (input) input.value = (finalText || interim).trim();
+      if (finalText) {
+        const spoken = finalText.trim();
+        isListening = false;
+        if (/^(stop|stop talking|goodbye|bye|that's all|thats all)$/i.test(spoken)) {
+          endVoiceConversation();
+          sendQuery(spoken, true);
+          return;
+        }
+        sendQuery(spoken, true);
+      }
+    };
+
+    recognition.onerror = (ev) => {
+      isListening = false;
+      if (micBtn) micBtn.classList.remove("mic-listening");
+      if (ev && ev.error === "not-allowed") {
+        conversationMode = false;
+        setChatStatus("Microphone permission is blocked. Allow the mic to talk with SET.");
+      }
+    };
+
+    recognition.onend = () => {
+      isListening = false;
+      if (micBtn) micBtn.classList.remove("mic-listening");
+      if (input && !conversationMode) input.placeholder = PLACEHOLDER_IDLE;
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      isListening = false;
+    }
+  }
+
+  function toggleVoiceInput() {
+    if (isListening) {
+      conversationMode = false;
+      stopRecognition();
+      setChatStatus("Mic off. Type to keep talking with SET.");
+      return;
+    }
+    conversationMode = true;
+    voiceOutputEnabled = true;
+    syncVoiceToggleUi();
+    startListening(false);
+  }
+
+  function formatMarkdown(text) {
+    let escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    escaped = escaped.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    escaped = escaped.replace(/\*(.*?)\*/g, "<em>$1</em>");
+    escaped = escaped.replace(/^[•\-*]\s+(.*)$/gm, "<li>$1</li>");
+    escaped = escaped.replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>");
+    escaped = escaped.replace(/\n\n+/g, "</p><p>");
+    escaped = escaped.replace(/\n/g, "<br>");
+    return `<p>${escaped}</p>`;
+  }
+
+  function appendMessage(sender, contentHtml, plainText, autoSpeak = false, speakOverride) {
+    const stream = document.getElementById("chat-stream");
+    if (!stream) return;
+    stream.style.display = "flex";
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble chat-bubble-${sender}`;
+    if (sender === "user") {
+      bubble.textContent = contentHtml;
+    } else {
+      const spoken = speakOverride || plainText || "";
+      bubble.innerHTML = contentHtml + ` <button type="button" class="bubble-speak-btn" title="Hear SET say this" onclick="speakText(${JSON.stringify(spoken)}, true)">🔊</button>`;
+    }
+    stream.appendChild(bubble);
+    stream.scrollTop = stream.scrollHeight;
+    if (sender === "bot" && (autoSpeak || voiceOutputEnabled) && (speakOverride || plainText)) {
+      speakText(speakOverride || plainText, true);
+    }
+    return bubble;
+  }
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  async function sendQuery(queryText, fromVoice = false) {
+    const q = (queryText || "").trim();
+    if (!q || awaitingReply) return;
+    const input = document.getElementById("chat-input");
+    const stream = document.getElementById("chat-stream");
+    const badgeText = document.getElementById("badge-text");
+
+    if (fromVoice) {
+      conversationMode = true;
+      voiceOutputEnabled = true;
+      syncVoiceToggleUi();
+    }
+
+    if (input) input.value = "";
+    const prior = conversationHistory.slice(-10);
+    appendMessage("user", q);
+    conversationHistory.push({ role: "user", text: q });
+    awaitingReply = true;
+    stopRecognition();
+
+    const typing = document.createElement("div");
+    typing.className = "chat-bubble chat-bubble-bot typing-indicator";
+    typing.innerHTML = "<span></span><span></span><span></span>";
+    if (stream) {
+      stream.style.display = "flex";
+      stream.appendChild(typing);
+      stream.scrollTop = stream.scrollHeight;
+    }
+    setChatStatus("SET is thinking about your ledger…");
+
+    const activeAccount = "{{ active_account.id|default:'' }}";
+    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")
+      ? document.querySelector("[name=csrfmiddlewaretoken]").value
+      : getCookie("csrftoken");
+
+    try {
+      const res = await fetch("{% url 'chat_api' %}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({
+          message: q,
+          account_id: activeAccount,
+          history: prior,
+          state: dialogueState,
+        }),
+      });
+      const data = await res.json();
+      typing.remove();
+      awaitingReply = false;
+
+      if (data.status === "ok") {
+        if (badgeText) {
+          const m = data.model || "";
+          badgeText.textContent = m.includes("gemini") ? "SET Gemini" : (m.includes("groq") ? "SET Groq" : "SET Active");
+        }
+        if (data.state) dialogueState = data.state;
+        conversationHistory.push({ role: "assistant", text: data.reply });
+        const shouldSpeak = fromVoice || voiceOutputEnabled;
+        appendMessage("bot", formatMarkdown(data.reply), data.reply, shouldSpeak, data.speak || data.reply);
+        if (data.end_conversation) {
+          conversationMode = false;
+          setChatStatus("SET ended this voice turn. Tap the mic to start another.");
+        }
+      } else {
+        appendMessage("bot", `<p style="color:var(--debit);">${data.error || "An error occurred."}</p>`, "An error occurred.", fromVoice);
+      }
+    } catch (err) {
+      typing.remove();
+      awaitingReply = false;
+      appendMessage("bot", `<p style="color:var(--debit);">Could not reach SET. Try again.</p>`, "Could not reach SET.", fromVoice);
+    }
+  }
+
+  document.querySelectorAll(".chat-pill").forEach(function (pill) {
+    pill.addEventListener("click", function () {
+      var q = this.getAttribute("data-q") || this.innerText.trim();
+      sendQuery(q, false);
+    });
+  });
+
+  (function greetSet() {
+    const intro =
+      "Hi " + SET_USER_NAME + ". I am SET, your Smart Expense Tracker assistant. " +
+      "I can talk through the statements in this project — dates, banks, vendors, GST, balances, and cashflow. " +
+      "Type a question, or tap the mic and we will go back and forth out loud.";
+    conversationHistory.push({ role: "assistant", text: intro });
+    appendMessage("bot", formatMarkdown(intro), intro, false, intro);
+  })();
+  if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = pickSpeechVoice;
+
+  // Modal helpers
+  function openManualModal(parentId, defaultDesc, defaultAmt, accountId) {
+    document.getElementById("modal-parent-id").value = parentId || "";
+    document.getElementById("modal-account-id").value = accountId || "";
+    if (defaultDesc) document.getElementById("modal-description").value = defaultDesc;
+    if (defaultAmt) document.getElementById("modal-amount").value = defaultAmt;
+    const dateInput = document.getElementById("modal-date");
+    if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+    document.getElementById("manual-modal").style.display = "flex";
+  }
+
+  function closeManualModal() {
+    document.getElementById("manual-modal").style.display = "none";
+  }
+
+  window.addEventListener("click", function(e) {
+    const modal = document.getElementById("manual-modal");
+    if (e.target === modal) closeManualModal();
+  });
+</script>
+{% endblock %}

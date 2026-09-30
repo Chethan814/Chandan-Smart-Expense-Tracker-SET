@@ -1,0 +1,78 @@
+<form class="toolbar" method="get">
+  <div class="filter-grid">
+    <div class="filter-group filter-search">
+      <label for="filter-q">Search</label>
+      <input type="text" id="filter-q" name="q" value="{{ filters.search }}" placeholder="Search description...">
+    </div>
+
+    <div class="filter-group">
+      <label for="filter-from">From</label>
+      <input type="date" name="from" id="filter-from" value="{{ filters.date_from_raw }}" {% if date_min %}min="{{ date_min }}"{% endif %} {% if date_max %}max="{{ date_max }}"{% endif %}>
+    </div>
+
+    <div class="filter-group">
+      <label for="filter-to">To</label>
+      <input type="date" name="to" id="filter-to" value="{{ filters.date_to_raw }}" {% if date_min %}min="{{ date_min }}"{% endif %} {% if date_max %}max="{{ date_max }}"{% endif %}>
+    </div>
+
+    {% if show_account_filter %}
+    <div class="filter-group">
+      <label for="filter-account">Account</label>
+      <select id="filter-account" name="account">
+        <option value="">All accounts</option>
+        {% for acc in accounts %}
+          <option value="{{ acc.id }}" {% if filters.account_id == acc.id|stringformat:"s" %}selected{% endif %}>
+            {{ acc.bank_name }} · {{ acc.account_holder }} · {{ acc.display_account }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    {% if mode == "overall" %}
+    <div class="filter-group">
+      <label for="filter-bank">Bank</label>
+      <select id="filter-bank" name="bank">
+        <option value="">All banks</option>
+        {% for b in banks %}
+          <option value="{{ b }}" {% if filters.bank == b %}selected{% endif %}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="filter-group">
+      <label for="filter-category">Category</label>
+      <select id="filter-category" name="category">
+        <option value="">All categories</option>
+        {% for c in categories %}
+          <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="filter-type">Type</label>
+      <select id="filter-type" name="type">
+        <option value="">All (Dr + Cr)</option>
+        <option value="debit" {% if filters.txn_type == "debit" %}selected{% endif %}>Debit only</option>
+        <option value="credit" {% if filters.txn_type == "credit" %}selected{% endif %}>Credit only</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="filter-min-amount">Min (₹)</label>
+      <input type="number" id="filter-min-amount" name="min_amount" step="0.01" value="{{ filters.min_amount }}" placeholder="0">
+    </div>
+
+    <div class="filter-group">
+      <label for="filter-max-amount">Max (₹)</label>
+      <input type="number" id="filter-max-amount" name="max_amount" step="0.01" value="{{ filters.max_amount }}" placeholder="Any">
+    </div>
+
+    <div class="filter-actions">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn" href="{{ reset_url }}">Reset</a>
+    </div>
+  </div>
+</form>
