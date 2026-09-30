@@ -70,9 +70,4 @@ Account identity also uses regex for account number and holder name, then a fing
 - `templates/` four visual themes
 - `sample_statements/` viva demo files
 
-## Viva talking points
 
-- Input is restricted to statement-like files.
-- Extraction preserves debit/credit columns from the source.
-- Classification is a trained model, not hard-coded if-else for every merchant (rules only help bank/account identity).
-- Dashboard is overall plus distinctive per-account views.
