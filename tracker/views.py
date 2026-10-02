@@ -86,6 +86,8 @@ def upload_view(request):
             )
         try:
             process_batch(batch)
+            from ai_engine.rag import get_user_vector_store
+            get_user_vector_store(request.user, force_refresh=True)
         except PipelineError as exc:
             request.session["pipeline_error"] = exc.message
             return redirect("home")

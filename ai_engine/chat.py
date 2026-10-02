@@ -15,6 +15,8 @@ from django.conf import settings
 from tracker.models import BankAccount, StatementFile, Transaction
 
 from ai_engine.categories import CATEGORIES
+from ai_engine.memory import SessionMemoryBuffer
+from ai_engine.rag import get_user_vector_store
 
 
 MONTH_MAP = {
@@ -741,6 +743,16 @@ def answer_transaction_query(
         "count": len(txns_data),
     }
 
+    # 1. Conversational Memory Buffer & Query Condensation
+    mem_buffer = SessionMemoryBuffer(max_turns=8)
+    mem_buffer.load_from_history(history or [])
+    rewritten_query = mem_buffer.rewrite_query_with_context(query)
+
+    # 2. Local Semantic Vector Store (RAG Search)
+    vstore = get_user_vector_store(user, account_id=acc_id)
+    rag_results = vstore.search(rewritten_query or query, top_k=6)
+    rag_chunks = [f"- {r['chunk']}" for r in rag_results]
+
     prior = _normalize_history(history, query)
     default_year = _infer_year(txns_data)
     incoming = _parse_query_slots(query, default_year)
@@ -797,7 +809,10 @@ Accounts:
 Category spend:
 {chr(10).join(cat_lines) if cat_lines else "None"}
 
-Rows most relevant to this turn:
+Semantically retrieved RAG records (Top matches for: "{rewritten_query}"):
+{chr(10).join(rag_chunks) if rag_chunks else "No specific semantic matches found."}
+
+Recent transactions in focus:
 {chr(10).join(txn_lines) if txn_lines else "No transactions recorded."}
 """
 
