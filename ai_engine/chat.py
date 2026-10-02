@@ -749,7 +749,13 @@ def answer_transaction_query(
     rewritten_query = mem_buffer.rewrite_query_with_context(query)
 
     # 2. Local Semantic Vector Store (RAG Search)
-    vstore = get_user_vector_store(user, account_id=acc_id)
+    parsed_acc_id = None
+    if account_id:
+        try:
+            parsed_acc_id = int(account_id)
+        except (ValueError, TypeError):
+            parsed_acc_id = None
+    vstore = get_user_vector_store(user, account_id=parsed_acc_id)
     rag_results = vstore.search(rewritten_query or query, top_k=6)
     rag_chunks = [f"- {r['chunk']}" for r in rag_results]
 
