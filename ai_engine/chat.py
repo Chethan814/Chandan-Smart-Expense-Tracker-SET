@@ -115,7 +115,8 @@ def _speak_text(reply: str) -> str:
     text = re.sub(r"[*_`#]", "", reply or "")
     text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)
     text = text.replace("₹", "rupees ")
-    text = re.sub(r"[•⚠️✅🤝💼🏛️📈👥💳🏷️📊🔍📋📅🗓️💰🏦📄]", " ", text)
+    text = re.sub(r"[•⚠️✅🤝💼🏛️📈👥💳🏷️📊🔍📋📅🗓️💰🏦📄💡]", " ", text)
+    text = re.sub(r"\n+", ". ", text)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) > 900:
         text = text[:880].rsplit(" ", 1)[0] + "."
@@ -354,6 +355,14 @@ def _parse_query_slots(query: str, default_year: int) -> dict[str, Any]:
         slots["intent"] = "average"
     elif re.search(r"\b(how many transactions|total transactions|number of transactions)\b", ql):
         slots["intent"] = "count"
+    elif re.search(r"\b(subscription|subscriptions|recurring|monthly bills|autopay|repeat payments)\b", ql):
+        slots["intent"] = "subscriptions"
+    elif re.search(r"\b(merchant|merchants|top vendors|vendor breakdown|payee breakdown|who did i pay)\b", ql):
+        slots["intent"] = "merchants"
+    elif re.search(r"\b(spending speed|velocity|spending trend|monthly trend|am i spending more|trend analysis)\b", ql):
+        slots["intent"] = "velocity"
+    elif re.search(r"\b(advice|saving tips|how to save|recommendation|reduce expense|reduce spending|budget advice)\b", ql):
+        slots["intent"] = "advice"
     elif slots["intent"] == "open" and slots["category"]:
         slots["intent"] = "category"
     elif slots["intent"] == "open" and (slots["date_from"] or slots["month"]):
@@ -556,6 +565,86 @@ def _compose_ledger_answer(query: str, txns: list[dict], metrics: dict, user, st
             f"outflows **{_format_inr(debit)}**. Want them listed, or grouped by category?"
         )
 
+    if intent == "subscriptions":
+        subs = [
+            t for t in scoped
+            if t["category"] in {"Subscription", "Bills"}
+            or any(w in t["description"].lower() for w in ["netflix", "spotify", "prime", "aws", "swiggy one", "zomato gold", "hotstar", "google", "apple", "adobe", "wifi", "broadband", "electricity", "rent"])
+        ]
+        if subs:
+            total_sub = sum(t["debit"] for t in subs)
+            unique_desc: dict[str, float] = {}
+            for t in subs:
+                key = t["description"].strip()
+                unique_desc[key] = unique_desc.get(key, 0.0) + float(t["debit"])
+            sub_lines = [f"• **{k}**: {_format_inr(v)}" for k, v in sorted(unique_desc.items(), key=lambda x: x[1], reverse=True)[:7]]
+            return (
+                f"Identified **recurring bills & subscriptions**{name} ({label}):\n\n"
+                f"• Total Subscriptions & Bills: **{_format_inr(total_sub)}** across {len(subs)} payments\n\n"
+                "**Breakdown:**\n" + "\n".join(sub_lines) + "\n\n"
+                "Want to drill down into any specific bill or service?"
+            )
+        return f"No recurring subscriptions or bill payments detected for {label}{name}."
+
+    if intent == "merchants":
+        debits = [t for t in scoped if t["debit"] > 0]
+        if debits:
+            merchants: dict[str, dict] = {}
+            for t in debits:
+                desc = t["description"].strip()
+                key = desc.split()[0].title() if len(desc.split()) > 0 else desc
+                if key not in merchants:
+                    merchants[key] = {"total": 0.0, "count": 0, "sample": desc}
+                merchants[key]["total"] += float(t["debit"])
+                merchants[key]["count"] += 1
+            sorted_merchants = sorted(merchants.items(), key=lambda x: x[1]["total"], reverse=True)[:5]
+            lines = [f"• **{m}** (*{info['sample'][:30]}*): {_format_inr(info['total'])} ({info['count']} txns)" for m, info in sorted_merchants]
+            return (
+                f"Top **merchants & payees**{name} ({label}):\n\n"
+                + "\n".join(lines) + "\n\n"
+                "Would you like to list all transactions for any of these merchants?"
+            )
+
+    if intent == "velocity":
+        by_month: dict[str, float] = {}
+        for t in scoped:
+            if t["debit"] > 0 and t.get("date"):
+                m_key = t["date"][:7]
+                by_month[m_key] = by_month.get(m_key, 0.0) + float(t["debit"])
+        sorted_months = sorted(by_month.items())
+        if len(sorted_months) >= 2:
+            m1, v1 = sorted_months[-2]
+            m2, v2 = sorted_months[-1]
+            diff = v2 - v1
+            pct = ((v2 - v1) / v1 * 100) if v1 > 0 else 0
+            direction = "increased" if diff > 0 else "decreased"
+            return (
+                f"Spending **velocity & trend**{name}:\n\n"
+                f"• **{m1}**: {_format_inr(v1)}\n"
+                f"• **{m2}**: {_format_inr(v2)}\n\n"
+                f"Outflows {direction} by **{_format_inr(abs(diff))} ({abs(pct):.1f}%)** between {m1} and {m2}.\n"
+                "Would you like a breakdown of what drove this change?"
+            )
+        return f"Insufficient multi-month data to compute spending velocity for {label}{name}."
+
+    if intent == "advice":
+        by_cat: dict[str, float] = {}
+        for t in scoped:
+            if t["debit"] > 0:
+                by_cat[t["category"]] = by_cat.get(t["category"], 0.0) + float(t["debit"])
+        top_cats = sorted(by_cat.items(), key=lambda x: x[1], reverse=True)[:2]
+        health_tip = "You have a positive net surplus! Consider moving excess funds to investments or high-yield savings." if net >= 0 else "Your outflows exceed inflows. Consider capping optional spending."
+        cat_tips = ""
+        if top_cats:
+            cat_tips = f"\n• Your highest spending goes to **{top_cats[0][0]}** ({_format_inr(top_cats[0][1])}). Setting a 15% budget cap here could save you **{_format_inr(top_cats[0][1] * 0.15)}** monthly."
+        return (
+            f"**Financial Advisory & Smart Tips**{name} ({label}):\n\n"
+            f"• {health_tip}"
+            f"{cat_tips}\n"
+            f"• Track unallocated ATM cash withdrawals to maintain 100% auditable accounting.\n\n"
+            "Ask me to analyze any specific spending category to explore further optimization!"
+        )
+
     if intent == "summary":
         by_cat: dict[str, float] = {}
         for t in scoped:
@@ -749,7 +838,11 @@ def answer_transaction_query(
     rewritten_query = mem_buffer.rewrite_query_with_context(query)
 
     # 2. Local Semantic Vector Store (RAG Search)
-    vstore = get_user_vector_store(user, account_id=acc_id)
+    try:
+        acc_id_int = int(account_id) if account_id else None
+    except (ValueError, TypeError):
+        acc_id_int = None
+    vstore = get_user_vector_store(user, account_id=acc_id_int)
     rag_results = vstore.search(rewritten_query or query, top_k=6)
     rag_chunks = [f"- {r['chunk']}" for r in rag_results]
 

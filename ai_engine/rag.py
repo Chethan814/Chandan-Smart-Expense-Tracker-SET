@@ -117,7 +117,7 @@ def get_user_vector_store(user, account_id: Optional[int] = None, force_refresh:
     if not force_refresh and cache_key in _USER_VECTOR_STORES:
         return _USER_VECTOR_STORES[cache_key]
 
-    qs = Transaction.objects.select_related("account").filter(account__user=user)
+    qs = Transaction.objects.select_related("account").filter(user=user)
     if account_id:
         qs = qs.filter(account_id=account_id)
 
