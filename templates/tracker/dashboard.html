@@ -132,9 +132,9 @@
         <span class="chat-header-sub" id="chat-status-line">Conversation over this project's statements, accounts, and cashflow.</span>
       </div>
       <div class="chat-header-actions">
-        <button type="button" class="voice-toggle-btn" id="voice-toggle-btn" onclick="toggleVoiceOutput()" title="Hear SET speak replies">
-          <span id="voice-icon">🔇</span>
-          <span id="voice-label">SET Voice: OFF</span>
+        <button type="button" class="voice-toggle-btn voice-on" id="voice-toggle-btn" onclick="toggleVoiceOutput()" title="Hear SET speak replies">
+          <span id="voice-icon">🔊</span>
+          <span id="voice-label">SET Voice: ON</span>
         </button>
         <span class="chat-model-badge" id="badge-text">SET Active</span>
       </div>
@@ -323,7 +323,7 @@
   });
 
   // ---------- SET voice + multi-turn conversation ----------
-  let voiceOutputEnabled = false;
+  let voiceOutputEnabled = true;
   let conversationMode = false;
   let awaitingReply = false;
   let recognition = null;
